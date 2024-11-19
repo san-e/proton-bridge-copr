@@ -1,0 +1,204 @@
+name: Sync Upstream and Build Release
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync-upstream:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    outputs:
+      needs_update: ${{ steps.check-version.outputs.needs_update }}
+      BRIDGE_VER: ${{ steps.check-version.outputs.BRIDGE_VER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: check for new upstream version
+        id: check-version
+        run: |
+          git fetch --tags
+          LOCAL_TAG=$(git describe --tags --abbrev=0)
+          UPSTREAM_VER=$(curl -s https://api.github.com/repos/ProtonMail/proton-bridge/releases/latest | jq -r '.tag_name')
+
+          # check if new version is available and new version starts with a digit
+          NEEDS_UPDATE=false
+          echo "Current version: $LOCAL_TAG"
+          if [ "$LOCAL_TAG" != "$UPSTREAM_VER" ] && [[ $UPSTREAM_VER =~ ^[0-9] ]]; then
+            echo "New version available: $UPSTREAM_VER"
+            NEEDS_UPDATE=true
+          else
+            echo "No new version available"
+          fi
+
+          # write output so next steps can use it to skip if no new version
+          echo "BRIDGE_VER=$UPSTREAM_VER" >> $GITHUB_ENV
+          echo "BRIDGE_VER=$UPSTREAM_VER" >> $GITHUB_OUTPUT
+          echo "needs_update=$NEEDS_UPDATE" >> $GITHUB_OUTPUT
+
+  build-linux:
+    timeout-minutes: 180
+    needs: [sync-upstream]
+    if: needs.sync-upstream.outputs.needs_update == 'true'
+    permissions:
+      contents: write
+    runs-on: buildjet-16vcpu-ubuntu-2204-arm
+    env:
+      BRIDGE_VER: ${{ needs.sync-upstream.outputs.BRIDGE_VER }}
+    outputs:
+      artifact-id: ${{ steps.artifact-upload.outputs.artifact-id }}
+      commit-id: ${{ steps.commit-update.outputs.commit-id }}
+    steps:
+      - name : Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup git bot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  
+      - name: Update proton-bridge submodule to new version tag
+        run: |
+          echo "Proton-Bridge Version requested: $BRIDGE_VER"
+          cd proton-bridge
+          git fetch --tags
+          git checkout $BRIDGE_VER
+          cd ..
+          git add proton-bridge
+
+      # setup environment
+      - name: Install Python and cache dependencies
+        uses: buildjet/setup-python@v5
+        with:
+          python-version: '3.10.x'
+          cache: pip
+
+      - name: Install Go and enable caching
+        uses: buildjet/setup-go@v5
+        with:
+          go-version: '1.21.9'
+          cache: true
+
+      - name: Install ARM Qt 6.7.0
+        uses: ArchitektApx/install-qt-action@v4
+        with:
+          cache: true
+          version: 6.7.0
+          host: linux_arm64
+          arch: linux_gcc_arm64
+          modules: 'qtmultimedia qtpositioning qtwebchannel qtwebengine qtwebview'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt update && sudo apt-get install -y \
+            ninja-build \
+            libglvnd-dev \
+            libsecret-1-dev \
+            pkg-config
+
+      - name: Apply patches to upstream source
+        run: |
+          for patch in $(ls patches/*.patch | sort); do
+            echo "Applying patch $patch"
+            patch -p1 < $patch
+          done
+
+      - name: Export VCPKG environment variables
+        run: |
+          echo "VCPKG_BINARY_SOURCES=clear;x-gha,readwrite" >> "$GITHUB_ENV"
+          echo "VCPKG_FORCE_SYSTEM_BINARIES=1" >> "$GITHUB_ENV"
+  
+      - name: Run Build
+        run: |
+          cd proton-bridge
+          make build
+
+      - name: Rename Build Artifact
+        run: |
+          mv proton-bridge/bridge*.tgz protonmail-bridge-linux-arm64.tgz
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        id: artifact-upload
+        with:
+          name: protonmail-bridge-linux-arm64.tgz
+          path: protonmail-bridge-linux-arm64.tgz
+
+      - name: Update protonmail-bridge spec file
+        run: | 
+          # remove v from version tag
+          SPEC_VER=$(echo $BRIDGE_VER | sed 's/v//')
+          # update spec file version and url
+          sed -i '0,/Version:.*/s//Version:            '$SPEC_VER'/' protonmail-bridge.spec
+          sed -i 's@releases/download/.*@releases/download/'$BRIDGE_VER'/protonmail-bridge-linux-arm64.tgz@g' protonmail-bridge.spec
+  
+          # get upstream changelog from latest release
+          CHANGELOG=$(curl -s https://api.github.com/repos/ProtonMail/proton-bridge/releases/latest | jq -r '.body')
+          # replace * with - to match rpm changelog format
+          CHANGELOG=$(echo $CHANGELOG | sed 's/\*/-/g')
+          # remove ### from changelog
+          CHANGELOG=$(echo $CHANGELOG | sed 's/###//g')
+
+          # get current changelog from spec file (everything after %changelog)
+          OLD_CHANGELOG="$(sed -n '/%changelog/,$p' zen-browser.spec | sed '1d')"
+
+          # create new changelog line with current date and commit messag
+          NEW_CHANGELOG=$(echo -e "* $(date +'%a %b %d %Y') ArchitektApx <architektapx@gehinors.ch> - $SPEC_VER\n- $CHANGELOG\n\n$OLD_CHANGELOG")
+
+          # replace old changelog with new one
+          sed -i '/%changelog/,$d' protonmail-bridge.spec
+          echo -e "%changelog\n$NEW_CHANGELOG" >> protonmail-bridge.spec
+          git add protonmail-bridge.spec
+
+      - name: commit and tag new version
+        id: commit-update
+        run: |
+          git commit -m "chore(zen-browser): Sync/Rebuild Proton-Bridge to $ZEN_VER"
+          git tag $BRIDGE_VER
+          git push 
+          git push --tags
+
+          # get commit sha for later use
+          echo "commit-id=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+  release:
+    needs: [sync-upstream, build-linux]
+    permissions:
+      contents: write
+    if: needs.sync-upstream.outputs.needs_update == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: protonmail-bridge-linux-arm64.tgz
+
+      - name: Setup Release
+        id: setup-release
+        run: |
+          # get upstream body and write to markdown file
+          UPSTREAM_JSON=$(curl -s https://api.github.com/repos/ProtonMail/proton-bridge/releases/latest)
+          echo $UPSTREAM_JSON | jq -r '.body' > release-notes.md
+          UPSTREAM_NAME=$(echo $UPSTREAM_JSON | jq -r '.name')
+          echo "RELEASE_NAME=$UPSTREAM_NAME" >> $GITHUB_OUTPUT
+        
+
+      - name: Publish Release
+        uses: ncipollo/release-action@v1.14.0
+        with: 
+          artifacts: protonmail-bridge-linux-arm64.tgz
+          tag: ${{ needs.sync-upstream.outputs.BRIDGE_VER }}
+          commit: ${{ needs.build-linux.outputs.commit-id }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          bodyFile: ${{ github.workspace }}/release-notes.md
+          makeLatest: true
+          name: ${{ steps.setup-release.outputs.RELEASE_NAME }}
+          skipIfReleaseExists: true
