@@ -76,5 +76,15 @@ gtk-update-icon-cache -f -t %{_datadir}/icons/hicolor
 - BRIDGE-106: Fixed import of multipart-related messages.
 - BRIDGE-108: Fixed GetInitials when empty username is passed.
 
+* Wed Nov 20 2024 ArchitektApx <architektapx@gehinors.ch> - 3.14.0
+- Changed
+- BRIDGE-207: Failure to download or verify an update now fails silently.
+- BRIDGE-204: Removed redundant Sentry events.
+- BRIDGE-150: Observability service modification.
+- BRIDGE-210: Reduced log level of cache events so they won't be printed to stdout.
+- Fixed
+- BRIDGE-106: Fixed import of multipart-related messages.
+- BRIDGE-108: Fixed GetInitials when empty username is passed.
+
 * Tue Nov 19 2024 ArchitektApx <architektapx@gehinors.ch> - 3.13.0
 - Inital arm64 build release
