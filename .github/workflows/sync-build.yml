@@ -27,7 +27,7 @@ jobs:
           # check if new version is available and new version starts with a digit
           NEEDS_UPDATE=false
           echo "Current version: $LOCAL_TAG"
-          if [ "$LOCAL_TAG" != "$UPSTREAM_VER" ] && [[ $UPSTREAM_VER =~ ^[0-9] ]]; then
+          if [ "$LOCAL_TAG" != "$UPSTREAM_VER" ] && [[ $UPSTREAM_VER =~ ^v[0-9] ]]; then
             echo "New version available: $UPSTREAM_VER"
             NEEDS_UPDATE=true
           else
@@ -74,9 +74,10 @@ jobs:
       # setup environment
       - name: Install Python and cache dependencies
         uses: buildjet/setup-python@v5
-        with:
-          python-version: '3.10.x'
-          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
 
       - name: Install Go and enable caching
         uses: buildjet/setup-go@v5
@@ -108,6 +109,13 @@ jobs:
             patch -p1 < $patch
           done
 
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Export VCPKG environment variables
         run: |
           echo "VCPKG_BINARY_SOURCES=clear;x-gha,readwrite" >> "$GITHUB_ENV"
@@ -118,16 +126,19 @@ jobs:
           cd proton-bridge
           make build
 
-      - name: Rename Build Artifact
+      - name: Rename/Repack Build Artifact
         run: |
-          mv proton-bridge/bridge*.tgz protonmail-bridge-linux-arm64.tgz
+          # pack into protonmail-bridge folder and repack as tar.gz
+          mkdir -p protonmail
+          tar -xzf proton-bridge/bridge*.tgz -C protonmail
+          tar -czf protonmail-bridge-linux-arm64.tar.gz protonmail
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         id: artifact-upload
         with:
-          name: protonmail-bridge-linux-arm64.tgz
-          path: protonmail-bridge-linux-arm64.tgz
+          name: protonmail-bridge-linux-arm64.tar.gz
+          path: protonmail-bridge-linux-arm64.tar.gz
 
       - name: Update protonmail-bridge spec file
         run: | 
@@ -135,20 +146,18 @@ jobs:
           SPEC_VER=$(echo $BRIDGE_VER | sed 's/v//')
           # update spec file version and url
           sed -i '0,/Version:.*/s//Version:            '$SPEC_VER'/' protonmail-bridge.spec
-          sed -i 's@releases/download/.*@releases/download/'$BRIDGE_VER'/protonmail-bridge-linux-arm64.tgz@g' protonmail-bridge.spec
+          sed -i 's@releases/download/.*@releases/download/'$BRIDGE_VER'/protonmail-bridge-linux-arm64.tar.gz@g' protonmail-bridge.spec
   
           # get upstream changelog from latest release
-          CHANGELOG=$(curl -s https://api.github.com/repos/ProtonMail/proton-bridge/releases/latest | jq -r '.body')
-          # replace * with - to match rpm changelog format
-          CHANGELOG=$(echo $CHANGELOG | sed 's/\*/-/g')
-          # remove ### from changelog
-          CHANGELOG=$(echo $CHANGELOG | sed 's/###//g')
+          CHANGELOG="$(curl -s https://api.github.com/repos/ProtonMail/proton-bridge/releases/latest | jq -r '.body')"
+          # format changelog to rpm format
+          CHANGELOG="$(echo "$CHANGELOG" | sed 's/\*/-/g' | sed 's/###/-/g' | sed '/^$/d')"
 
           # get current changelog from spec file (everything after %changelog)
-          OLD_CHANGELOG="$(sed -n '/%changelog/,$p' zen-browser.spec | sed '1d')"
+          OLD_CHANGELOG="$(sed -n '/%changelog/,$p' protonmail-bridge.spec | sed '1d')"
 
-          # create new changelog line with current date and commit messag
-          NEW_CHANGELOG=$(echo -e "* $(date +'%a %b %d %Y') ArchitektApx <architektapx@gehinors.ch> - $SPEC_VER\n- $CHANGELOG\n\n$OLD_CHANGELOG")
+          # create new changelog line with current date and commit message
+          NEW_CHANGELOG="$(echo -e "* $(date +'%a %b %d %Y') ArchitektApx <architektapx@gehinors.ch> - $SPEC_VER\n$CHANGELOG\n\n$OLD_CHANGELOG")"
 
           # replace old changelog with new one
           sed -i '/%changelog/,$d' protonmail-bridge.spec
@@ -179,7 +188,7 @@ jobs:
       - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
-          name: protonmail-bridge-linux-arm64.tgz
+          name: protonmail-bridge-linux-arm64.tar.gz
 
       - name: Setup Release
         id: setup-release
@@ -194,7 +203,7 @@ jobs:
       - name: Publish Release
         uses: ncipollo/release-action@v1.14.0
         with: 
-          artifacts: protonmail-bridge-linux-arm64.tgz
+          artifacts: protonmail-bridge-linux-arm64.tar.gz
           tag: ${{ needs.sync-upstream.outputs.BRIDGE_VER }}
           commit: ${{ needs.build-linux.outputs.commit-id }}
           token: ${{ secrets.GITHUB_TOKEN }}

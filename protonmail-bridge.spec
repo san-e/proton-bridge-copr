@@ -3,13 +3,14 @@
 %global             debug_package %{nil}
 
 Name:               protonmail-bridge
-Version:            3.13.0
+Version:            3.14.0
 Release:            1%{?dist}
 Summary:            Proton Mail Bridge for Linux (aarch64)
 
 License:            GPLv3
 URL:                https://proton.me/mail/bridge
-Source0:            https://github.com/ArchitektApx/proton-bridge-copr/releases/download/v3.13.0/protonmail-bridge-v3.13.0.aarch64.tar.bz2
+Source0:            https://github.com/ArchitektApx/proton-bridge-copr/releases/download/v3.14.0/protonmail-bridge-linux-arm64.tar.gz
+Source1:            protonmail-bridge
 
 ExclusiveArch:  aarch64
 
@@ -39,22 +40,20 @@ Bugs related to this package should be reported at this Git project:
 <https://github.com/ArchitektApx/proton-bridge-copr>
 
 %prep
-%setup -q -n %{full_name}
+%setup -q -n %{short_name}
 
 %install
 %__rm -rf %{buildroot}
 
 %__install -d %{buildroot}{/usr/lib/%{short_name}/bridge,%{_bindir},%{_datadir}/applications,%{_datadir}/icons/hicolor/scalable/apps,%{_datadir}/doc/%{short_name}/bridge}
 
-%__install _D -m 0644 proton-bridge.desktop -t %{buildroot}%{_datadir}/applications
-
+%__install -D -m 0644 proton-bridge.desktop -t %{buildroot}%{_datadir}/applications
 %__install -D -m 0644 logo.svg -t %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/%{short_name}-bridge.svg
-%__install -D -m 0644 LICENSE -t %{buildroot}%{_datadir}/doc/%{short_name}/bridge
-%__install -D -m 0755 Changelog.md -t %{buildroot}%{_datadir}/doc/%{short_name}/bridge
+%__install -D -m 0444 LICENSE -t %{buildroot}%{_datadir}/doc/%{short_name}/bridge
+%__install -D -m 0444 Changelog.md -t %{buildroot}%{_datadir}/doc/%{short_name}/bridge
+%__install -D -m 0755 %{SOURCE1} -t %{buildroot}%{_bindir}/%{full_name}
 
 %__cp -r * %{buildroot}/usr/lib/%{short_name}/bridge
-
-%__ln_s %{buildroot}/usr/lib/%{short_name}/bridge/proton-bridge %{buildroot}%{_bindir}/%{full_name}
 
 %post
 gtk-update-icon-cache -f -t %{_datadir}/icons/hicolor
@@ -67,5 +66,15 @@ gtk-update-icon-cache -f -t %{_datadir}/icons/hicolor
 /usr/lib/%{short_name}/bridge
 
 %changelog
-* Tue 19 Nov 2024 ArchitektApx <architektapx@gehinors.ch> - 3.13.0
+* Wed Nov 20 2024 ArchitektApx <architektapx@gehinors.ch> - 3.14.0
+- Changed
+- BRIDGE-207: Failure to download or verify an update now fails silently.
+- BRIDGE-204: Removed redundant Sentry events.
+- BRIDGE-150: Observability service modification.
+- BRIDGE-210: Reduced log level of cache events so they won't be printed to stdout.
+- Fixed
+- BRIDGE-106: Fixed import of multipart-related messages.
+- BRIDGE-108: Fixed GetInitials when empty username is passed.
+
+* Tue Nov 19 2024 ArchitektApx <architektapx@gehinors.ch> - 3.13.0
 - Inital arm64 build release
