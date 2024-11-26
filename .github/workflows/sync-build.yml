@@ -71,7 +71,6 @@ jobs:
           cd ..
           git add proton-bridge
 
-      # setup environment
       - name: Install Python and cache dependencies
         uses: buildjet/setup-python@v5
 
@@ -101,6 +100,16 @@ jobs:
             libglvnd-dev \
             libsecret-1-dev \
             pkg-config
+
+      - name: Install Ruby and fpm for packaging
+        run: |
+          sudo apt-get install -y ruby-full
+          wget https://rubygems.org/rubygems/rubygems-3.4.8.tgz
+          tar xvzf rubygems-3.4.8.tgz
+          cd rubygems-3.4.8
+          sudo ruby setup.rb
+          sudo gem install dotenv fpm
+    
 
       - name: Apply patches to upstream source
         run: |
@@ -133,12 +142,77 @@ jobs:
           tar -xzf proton-bridge/bridge*.tgz -C protonmail
           tar -czf protonmail-bridge-linux-arm64.tar.gz protonmail
 
+          mkdir -p output
+          mv protonmail-bridge-linux-arm64.tar.gz output/
+
+      - name: Setup FPM environment
+        env: 
+          BRIDGE_VER: ${{ needs.sync-upstream.outputs.BRIDGE_VER }}
+        run: | 
+          mkdir -p packaging
+          tar -xzf proton-bridge/bridge*.tgz -C packaging
+
+          TAG_VER=$(echo $BRIDGE_VER | sed 's/v//')
+          
+          # after install script for deb/rpm 
+          cat >> after-install.sh <<EOF
+          #!/bin/sh
+          # link the executable to /usr/bin
+          ln -sF /usr/lib/protonmail/bridge/proton-bridge /usr/bin/protonmail-bridge
+          # update the desktop database and icon cache if gnome is installed
+          if [ -x /usr/bin/update-desktop-database ]; then
+            /usr/bin/update-desktop-database
+          fi
+          if [ -x /usr/bin/update-icon-caches ]; then
+            /usr/bin/update-icon-caches /usr/share/icons/hicolor
+          fi
+          EOF
+
+          # write shared fpm config
+          cat > .fpm <<EOF
+          -s dir
+          -n protonmail-bridge
+          -v $TAG_VER
+          --verbose
+          --force
+          --chdir ${{ github.workspace }}/packaging
+          --architecture aarch64
+          --provides protonmail-bridge
+          --description "Proton Mail Bridge is a desktop application that runs in the background encrypting and decrypting messages as they enter and leave your computer."
+          --license "GPLv3"
+          --maintainer "Proton AG (Proton Mail Bridge developers) <bridge@protonmail.ch> packed by ArchitektApx"
+          --vendor "Proton AG"
+          --url "https://proton.me/mail/bridge"
+          --after-install ${{ github.workspace }}/after-install.sh
+          proton-bridge.desktop=/usr/share/applications/protonmail-bridge.desktop logo.svg=/usr/share/icons/hicolor/scalable/apps/protonmail-bridge.svg Changelog.md=/usr/share/doc/protonmail/bridge/Changelog.md LICENSE=/usr/share/doc/protonmail/bridge/LICENSE .=/usr/lib/protonmail/bridge
+          EOF
+
+      - name: Package RPM
+        run: |
+          RPM_DEPENDS="dejavu-sans-fonts, fontconfig, glib2, glibc, libEGL, libgcc, libglvnd-glx, libsecret, libstdc++, libxkbcommon-x11"
+          fpm -t rpm --rpm-tag '%define _build_id_links none' --rpm-tag '%undefine _missing_build_ids_terminate_build' --depends "$RPM_DEPENDS" --rpm-summary "Proton Mail Bridge"
+          mv *.rpm output/
+    
+      - name: Package Deb
+        run: |
+          DEB_DEPENDS="libegl1, libc6, libsecret-1-0, libglib2.0-0, libstdc++6, libgcc1, libpulse-mainloop-glib0, fonts-dejavu"
+          DEB_SUGGESTS="gnome-keyring, pass"
+          fpm -t deb --depends "$DEB_DEPENDS" --deb-suggests "$DEB_SUGGESTS"
+          mv *.deb output/
+      
+      - name: Make sha256sums textfile and tar everything together
+        run: |
+          cd output/  
+          sha256sum *.rpm *.deb > sha256sums.txt
+          cd .. 
+          tar -czf protonmail-build-artifacts.tar.gz output/
+
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         id: artifact-upload
         with:
-          name: protonmail-bridge-linux-arm64.tar.gz
-          path: protonmail-bridge-linux-arm64.tar.gz
+          path: protonmail-build-artifacts.tar.gz
+          name: protonmail-build-artifacts.tar.gz
 
       - name: Update protonmail-bridge spec file
         run: | 
@@ -167,7 +241,7 @@ jobs:
       - name: commit and tag new version
         id: commit-update
         run: |
-          git commit -m "chore(zen-browser): Sync/Rebuild Proton-Bridge to $ZEN_VER"
+          git commit -m "chore(zen-browser): Sync/Rebuild Proton-Bridge to $BRIDGE_VER"
           git tag $BRIDGE_VER
           git push 
           git push --tags
@@ -188,7 +262,11 @@ jobs:
       - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
-          name: protonmail-bridge-linux-arm64.tar.gz
+          name: protonmail-build-artifacts.tar.gz
+
+      - name: Unpack Artifact
+        run: |
+          tar -xzf protonmail-build-artifacts.tar.gz
 
       - name: Setup Release
         id: setup-release
@@ -198,12 +276,11 @@ jobs:
           echo $UPSTREAM_JSON | jq -r '.body' > release-notes.md
           UPSTREAM_NAME=$(echo $UPSTREAM_JSON | jq -r '.name')
           echo "RELEASE_NAME=$UPSTREAM_NAME" >> $GITHUB_OUTPUT
-        
 
       - name: Publish Release
         uses: ncipollo/release-action@v1.14.0
         with: 
-          artifacts: protonmail-bridge-linux-arm64.tar.gz
+          artifacts: output/*
           tag: ${{ needs.sync-upstream.outputs.BRIDGE_VER }}
           commit: ${{ needs.build-linux.outputs.commit-id }}
           token: ${{ secrets.GITHUB_TOKEN }}
