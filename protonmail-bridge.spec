@@ -3,13 +3,13 @@
 %global             debug_package %{nil}
 
 Name:               protonmail-bridge
-Version:            3.14.0
+Version:            3.15.0
 Release:            1%{?dist}
 Summary:            Proton Mail Bridge for Linux (aarch64)
 
 License:            GPLv3
 URL:                https://proton.me/mail/bridge
-Source0:            https://github.com/ArchitektApx/proton-bridge-copr/releases/download/v3.14.0/protonmail-bridge-linux-arm64.tar.gz
+Source0:            https://github.com/ArchitektApx/proton-bridge-copr/releases/download/v3.15.0/protonmail-bridge-linux-arm64.tar.gz
 Source1:            protonmail-bridge
 
 ExclusiveArch:  aarch64
@@ -66,6 +66,26 @@ gtk-update-icon-cache -f -t %{_datadir}/icons/hicolor
 /usr/lib/%{short_name}/bridge
 
 %changelog
+* Tue Nov 26 2024 ArchitektApx <architektapx@gehinors.ch> - 3.15.0
+- Added
+- BRIDGE-238: Added host information to sentry events; new sentry event for keychain issues.
+- BRIDGE-236: Added SMTP observability metrics.
+- BRIDGE-217: Added missing parameter to the CLI help command.
+- BRIDGE-234: Add accessibility name in QML for UI automation.
+- BRIDGE-232: Test: Add Home Menu Bridge UI e2e automation tests.
+- BRIDGE-220: Test: Add Bridge E2E UI login/logout tests for Windows.
+- Changed
+- BRIDGE-228: Removed sentry events.
+- BRIDGE-218: Observability adapter; gluon observability metrics and tests.
+- BRIDGE-215: Tweak wording on macOS profile install page.
+- BRIDGE-131: Test: Integration tests for messages from Proton <-> Gmail.
+- BRIDGE-142: Bridge icon can be removed from the menu bar on macOS.
+- Fixed
+- BRIDGE-240: Fix for running against Qt 6.8 (contribution of GitHub user Cimbali).
+- BRIDGE-231: Fix reversed header order in messages.
+- BRIDGE-235: Fix compilation of Bridge GUI Tester on Windows.
+- BRIDGE-120: Use appropriate address key when importing / saving draft.
+
 * Wed Nov 20 2024 ArchitektApx <architektapx@gehinors.ch> - 3.14.0
 - Changed
 - BRIDGE-207: Failure to download or verify an update now fails silently.
