@@ -3,13 +3,13 @@
 %global             debug_package %{nil}
 
 Name:               protonmail-bridge
-Version:            3.15.0
+Version:            3.15.1
 Release:            1%{?dist}
 Summary:            Proton Mail Bridge for Linux (aarch64)
 
 License:            GPLv3
 URL:                https://proton.me/mail/bridge
-Source0:            https://github.com/ArchitektApx/proton-bridge-copr/releases/download/v3.15.0/protonmail-bridge-linux-arm64.tar.gz
+Source0:            https://github.com/ArchitektApx/proton-bridge-copr/releases/download/v3.15.1/protonmail-bridge-linux-arm64.tar.gz
 Source1:            protonmail-bridge
 
 ExclusiveArch:  aarch64
@@ -66,6 +66,10 @@ gtk-update-icon-cache -f -t %{_datadir}/icons/hicolor
 /usr/lib/%{short_name}/bridge
 
 %changelog
+* Thu Dec 12 2024 ArchitektApx <architektapx@gehinors.ch> - 3.15.1
+- Changed
+- BRIDGE-281: Disable keychain test on macOS.
+
 * Tue Nov 26 2024 ArchitektApx <architektapx@gehinors.ch> - 3.15.0
 - Added
 - BRIDGE-238: Added host information to sentry events; new sentry event for keychain issues.
