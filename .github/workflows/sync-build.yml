@@ -45,7 +45,7 @@ jobs:
     if: needs.sync-upstream.outputs.needs_update == 'true'
     permissions:
       contents: write
-    runs-on: buildjet-16vcpu-ubuntu-2204-arm
+    runs-on: ubuntu-22.04-arm
     env:
       BRIDGE_VER: ${{ needs.sync-upstream.outputs.BRIDGE_VER }}
     outputs:
@@ -72,14 +72,14 @@ jobs:
           git add proton-bridge
 
       - name: Install Python and cache dependencies
-        uses: buildjet/setup-python@v5
+        uses: actions/setup-python@v5
 
       - name: Install Python dependencies
         run: |
           pip install -r requirements.txt
 
       - name: Install Go and enable caching
-        uses: buildjet/setup-go@v5
+        uses: actions/setup-go@v5
         with:
           go-version: '1.21.9'
           cache: true
