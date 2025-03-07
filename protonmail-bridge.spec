@@ -3,13 +3,13 @@
 %global             debug_package %{nil}
 
 Name:               protonmail-bridge
-Version:            3.17.0
+Version:            3.18.0
 Release:            1%{?dist}
 Summary:            Proton Mail Bridge for Linux (aarch64)
 
 License:            GPLv3
 URL:                https://proton.me/mail/bridge
-Source0:            https://github.com/ArchitektApx/proton-bridge-copr/releases/download/v3.17.0/protonmail-bridge-linux-arm64.tar.gz
+Source0:            https://github.com/ArchitektApx/proton-bridge-copr/releases/download/v3.18.0/protonmail-bridge-linux-arm64.tar.gz
 Source1:            protonmail-bridge
 
 ExclusiveArch:  aarch64
@@ -66,6 +66,11 @@ gtk-update-icon-cache -f -t %{_datadir}/icons/hicolor
 /usr/lib/%{short_name}/bridge
 
 %changelog
+* Fri Mar 07 2025 ArchitektApx <architektapx@gehinors.ch> - 3.18.0
+- Changed
+- BRIDGE-309: Revised update logic and structure.
+- BRIDGE-154: Added access token to expiry refresh request.
+
 * Thu Feb 20 2025 ArchitektApx <architektapx@gehinors.ch> - 3.17.0
 - Added
 - BRIDGE-271: Report version file check failure to Sentry.
