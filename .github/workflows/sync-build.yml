@@ -78,8 +78,8 @@ jobs:
           go-version: '1.21.9'
           cache: true
 
-      - name: Install ARM Qt 6.8.2
-        uses: ArchitektApx/install-qt-action@v4
+      - name: Install ARM Qt^ 6.8.2
+        uses: jurplel/install-qt-action@v4
         with:
           cache: true
           version: 6.8.2
