@@ -23,18 +23,10 @@ jobs:
         id: check-version
         run: |
           git fetch --tags
-          LOCAL_TAG=$(git describe --tags --abbrev=0)
           UPSTREAM_VER=$(curl -s https://api.github.com/repos/ProtonMail/proton-bridge/releases/latest | jq -r '.tag_name')
 
           # check if new version is available and new version starts with a digit
-          NEEDS_UPDATE=false
-          echo "Current version: $LOCAL_TAG"
-          if [ "$LOCAL_TAG" != "$UPSTREAM_VER" ] && [[ $UPSTREAM_VER =~ ^v[0-9] ]]; then
-            echo "New version available: $UPSTREAM_VER"
-            NEEDS_UPDATE=true
-          else
-            echo "No new version available"
-          fi
+          NEEDS_UPDATE=true
 
           # write output so next steps can use it to skip if no new version
           echo "BRIDGE_VER=$UPSTREAM_VER" >> $GITHUB_ENV
