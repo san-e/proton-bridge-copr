@@ -129,19 +129,7 @@ jobs:
         continue-on-error: true
         run: |
           cd proton-bridge
-          make build
-
-      - name: Apply patches to upstream source
-        run: |
-          for patch in $(ls patches/*.patch | sort); do
-            echo "Applying patch $patch"
-            patch -p1 < $patch
-          done
-
-      - name: Run Build
-        run: |
-          cd proton-bridge
-          make build          
+          make build     
 
       - name: Rename/Repack Build Artifact
         run: |
