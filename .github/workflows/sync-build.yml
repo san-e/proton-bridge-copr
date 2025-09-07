@@ -39,7 +39,7 @@ jobs:
     if: needs.sync-upstream.outputs.needs_update == 'true'
     permissions:
       contents: write
-    runs-on: ubuntu-22.04-arm
+    runs-on: ubuntu-24.04-arm
     env:
       BRIDGE_VER: ${{ needs.sync-upstream.outputs.BRIDGE_VER }}
     outputs:
