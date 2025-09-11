@@ -134,7 +134,6 @@ jobs:
           
   
       - name: Run Build
-        continue-on-error: true
         run: |
           cd proton-bridge
           make build     
